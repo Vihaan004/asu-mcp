@@ -8,12 +8,32 @@ nicety, it is what keeps this from looking like a scraper.
 
 from __future__ import annotations
 
+import html as _html
 import os
+import re
 import threading
 import time
 from typing import Any
 
 import httpx
+
+_TAG = re.compile(r"<[^>]+>")
+
+
+def plain_text(value: Any) -> str:
+    """Strip markup and entities out of a field.
+
+    Several ASU sources hand back pre-rendered HTML inside what look like plain
+    string fields -- class meeting times as '3:00 PM<br/>&nbsp;-5:45 PM',
+    directory research interests wrapped in <p> tags. Not defensive coding;
+    both fire on real records.
+    """
+    text = str(value or "")
+    if not text:
+        return ""
+    text = _TAG.sub(" ", text)
+    text = _html.unescape(text).replace("\xa0", " ")
+    return " ".join(text.split())
 
 # Identify ourselves where we can. Some ASU endpoints reject non-browser agents
 # outright, so the default stays browser-shaped; set ASU_MCP_USER_AGENT to
@@ -103,6 +123,24 @@ class AsuHttpClient:
     def close(self) -> None:
         self._http.close()
 
+    def get_text(
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        *,
+        ttl: float = 0.0,
+    ) -> str:
+        """Fetch a page body. For sources with no API, only rendered HTML."""
+        key = ("text", *cache_key(path, params)) if ttl > 0 else None
+        if key is not None:
+            cached = self._cache.get(key)
+            if cached is not None:
+                return cached
+        body = self._fetch(path, params).text
+        if key is not None:
+            self._cache.set(key, body, ttl)
+        return body
+
     def get_json(
         self,
         path: str,
@@ -116,6 +154,17 @@ class AsuHttpClient:
             if cached is not None:
                 return cached
 
+        response = self._fetch(path, params)
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise AsuApiError(f"{self.base_url}{path} returned non-JSON") from exc
+
+        if key is not None:
+            self._cache.set(key, payload, ttl)
+        return payload
+
+    def _fetch(self, path: str, params: dict[str, Any] | None) -> httpx.Response:
         url = f"{self.base_url}{path}"
         try:
             response = self._http.get(url, params=params)
@@ -132,11 +181,4 @@ class AsuHttpClient:
             raise AsuApiError(
                 f"{url} returned {response.status_code}: {response.text[:200]}"
             )
-        try:
-            payload = response.json()
-        except ValueError as exc:
-            raise AsuApiError(f"{url} returned non-JSON") from exc
-
-        if key is not None:
-            self._cache.set(key, payload, ttl)
-        return payload
+        return response

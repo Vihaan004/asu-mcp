@@ -19,23 +19,32 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from .classes.tools import register as register_classes
+from .events.tools import register as register_events
+from .news.tools import register as register_news
+from .people.tools import register as register_people
 
 INSTRUCTIONS = """\
-Arizona State University's public data, live.
+Arizona State University's public data, live. Four areas:
 
-Class search: sections, meeting times, instructors, locations and real-time \
-seat availability for any ASU term.
+- Classes: sections, meeting times, instructors, locations and real-time seat \
+availability for any ASU term.
+- People: the public faculty and staff directory -- who works on what, with \
+published contact details.
+- Events: the university-wide calendar of upcoming talks, workshops and \
+info sessions.
+- News: stories ASU's own newsroom published.
 
-Term codes are opaque four-digit numbers (Fall 2026 is 2267). Never guess one \
--- the tools accept plain labels like 'Fall 2026' and default to the current \
+Class term codes are opaque four-digit numbers (Fall 2026 is 2267). Never guess \
+one -- the tools accept plain labels like 'Fall 2026' and default to the current \
 term, or call list_terms.
 
 Seat counts are live but are not reservations; a class showing open seats can \
 fill before a student enrolls. Enrollment happens in My ASU and cannot be done \
-through these tools.
+through these tools. The events calendar only covers what is scheduled ahead, \
+so past events cannot be searched.
 
-This is an unofficial tool built on ASU's public catalog. It is not operated by \
-or endorsed by Arizona State University.
+This is an unofficial tool built on ASU's public data. It is not operated by or \
+endorsed by Arizona State University.
 """
 
 
@@ -62,6 +71,9 @@ def build_server(transport: str = "stdio") -> FastMCP:
     )
 
     register_classes(mcp)
+    register_people(mcp)
+    register_events(mcp)
+    register_news(mcp)
 
     @mcp.custom_route("/health", methods=["GET"])
     async def health(_request: Request) -> JSONResponse:

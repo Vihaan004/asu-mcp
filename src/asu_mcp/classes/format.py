@@ -10,6 +10,20 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..core import plain_text as _plain
+
+# Campus codes as they arrive in the feed.
+CAMPUSES = {
+    "TEMPE": "Tempe",
+    "DTPHX": "Downtown Phoenix",
+    "POLY": "Polytechnic",
+    "WEST": "West Valley",
+    "WESTVALLEY": "West Valley",
+    "LAKE": "Lake Havasu",
+    "THUNDERBIRD": "Thunderbird",
+    "ASUONLINE": "ASU Online",
+}
+
 # Session codes students actually see on the schedule.
 SESSIONS = {
     "C": "full semester",
@@ -24,9 +38,6 @@ INSTRUCTION_MODES = {
     "H": "hybrid",
     "ISESSION": "iCourse",
 }
-
-DAY_ORDER = ["M", "T", "W", "Th", "F", "S", "Su"]
-
 
 def _clean_date(value: Any) -> str:
     """'2026-08-20 00:00:00.0' -> '2026-08-20'."""
@@ -67,7 +78,7 @@ def normalize(record: dict[str, Any]) -> dict[str, Any]:
     days = record.get("DAYLIST") or clas.get("DAYLIST") or ""
     if isinstance(days, list):
         days = " ".join(str(d).strip() for d in days if str(d).strip())
-    days = " ".join(str(days).split())
+    days = _plain(days)
 
     buildings = record.get("LOCATIONBUILDING") or []
     room = ""
@@ -111,9 +122,11 @@ def normalize(record: dict[str, Any]) -> dict[str, Any]:
         "units": units,
         "instructors": instructors,
         "days": days,
-        "start_time": str(clas.get("STARTTIME") or "").strip(),
-        "end_time": str(clas.get("ENDTIME") or "").strip(),
-        "campus": "ASU Online" if is_online else campus.title(),
+        "start_time": _plain(clas.get("STARTTIME")),
+        "end_time": _plain(clas.get("ENDTIME")),
+        "campus": "ASU Online"
+        if is_online
+        else CAMPUSES.get(campus.upper(), campus.title()),
         "room": "" if is_online else room,
         "map_url": "" if is_online else map_url,
         "enrolled": enrolled,

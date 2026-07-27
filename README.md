@@ -1,14 +1,15 @@
 # ASU MCP
 
-Ask Claude about ASU classes in plain language and get answers from the live
-schedule — sections, meeting times, instructors, rooms, and real seat counts.
+Ask Claude about ASU in plain language — classes, people, events and news — and
+get answers from live university data instead of a search engine's guess.
 
-> "Is CSE 310 open for fall?"
 > "Which machine learning classes still have seats and don't meet before 10am?"
-> "What is Yezhou Yang teaching this spring?"
+> "Who at ASU works on robotics, and how do I reach them?"
+> "Any research workshops on campus next week?"
+> "What has ASU published about semiconductors lately?"
 
-No ASURITE, no login, nothing behind a wall. This reads the same public catalog
-data as [catalog.apps.asu.edu](https://catalog.apps.asu.edu).
+No ASURITE, no login, nothing behind a wall — only data ASU already publishes
+openly.
 
 **Unofficial.** Built by a former ASU student. Not operated by, affiliated with,
 or endorsed by Arizona State University.
@@ -56,6 +57,12 @@ your own box. `GET /health` is there for platform health checks, and
 
 ## Tools
 
+Eight tools on one connector. Four areas, deliberately not four connectors —
+making students install one thing per campus system would recreate the
+fragmentation this exists to remove.
+
+**Classes** — ASU's live class schedule
+
 | Tool | |
 |---|---|
 | `search_classes` | Search by subject, course number, keywords, instructor, campus, days, times, level, units, honors. Optionally only sections with open seats. |
@@ -63,8 +70,24 @@ your own box. `GET /health` is there for platform health checks, and
 | `list_terms` | Available terms and their codes. |
 | `list_subjects` | The 343 subject codes for a term, so "computer science" resolves to `CSE`. |
 
-Coming: people (faculty and researchers), events, and news — as more tools on
-this same connector, not as separate ones to install.
+**People** — the public faculty and staff directory
+
+| Tool | |
+|---|---|
+| `search_people` | Find who works on a topic, or look up one person. Returns titles, departments, published contact details, expertise and research interests. |
+
+**Events** — the university-wide calendar
+
+| Tool | |
+|---|---|
+| `search_events` | Upcoming talks, workshops, info sessions and exhibitions, filtered by keyword, campus or date. |
+| `get_event` | Full description and registration link for one event. |
+
+**News** — ASU's own newsroom
+
+| Tool | |
+|---|---|
+| `search_news` | Research announcements and university stories, by topic or latest. |
 
 ## Try it without a client
 
@@ -98,6 +121,14 @@ principal. We send the same. Only that exact string works; `Bearer x` gets a
 That is the likeliest way this breaks. When it does, the server raises
 `AnonymousAuthRejected` saying so, rather than quietly returning nothing.
 
+**The other three sources.** People come from the iSearch directory API
+(`search.asu.edu/api/v1/webdir-profiles/faculty-staff`), a de facto public JSON
+API. Events are parsed from the rendered calendar listing — the site does expose
+Drupal JSON:API, but its event index only holds 2021–2023 content and its date
+filtering is broken (a `> 2099` filter still returns rows), so it is an archive,
+not the calendar. News reads `news.asu.edu`'s own search rather than a paid
+web-search API, so there is no API key to supply and no per-user cost.
+
 Two other things worth knowing if you build on this:
 
 - **`searchType=open` is a no-op.** The API accepts it and returns full sections
@@ -106,8 +137,17 @@ Two other things worth knowing if you build on this:
 - **Term codes are opaque.** Fall 2026 is `2267`. Every tool accepts
   `"Fall 2026"` and defaults to the current term. Nothing should hardcode one.
 
-Responses are cached in memory — term and subject lists for six hours, class
-searches for ten minutes. Long enough to be a good neighbour to ASU's servers,
+- **The directory fuzzy-matches surnames.** Searching `robotics` returns people
+  named Root, Rootes and Root before anyone who does robotics. Results are
+  over-fetched and re-ranked on whether query terms appear in title, expertise
+  or research; a direct name lookup still wins outright.
+- **Event keyword search is client-side.** The calendar listing ignores a
+  `search` parameter — it returns the same 24 cards whatever you pass — so
+  filtering happens locally over the next few listing pages. That covers roughly
+  the next two weeks, not the whole calendar.
+
+Responses are cached in memory — term and subject lists for six hours, searches
+for ten to thirty minutes. Long enough to be a good neighbour to ASU's servers,
 short enough that seat counts stay honest.
 
 Seat counts are live but are not reservations; a class can fill between the
@@ -120,9 +160,17 @@ uv sync
 uv run pytest
 ```
 
-Tests run against a captured response for CSE 310, Fall 2026 — 11 sections
-mixing full and open, in-person and online, some with no scheduled meeting
-time — so they don't depend on the network or on what's offered this week.
+Tests are fixture-based and never touch the network — a captured class-search
+response for CSE 310, Fall 2026 (11 sections mixing full and open, in-person and
+online, some with no scheduled meeting time) plus trimmed real markup for the
+events and news parsers.
+
+To see what a model actually receives, and to catch a source that has changed
+shape, run every tool against live ASU data:
+
+```bash
+uv run python samples.py
+```
 
 ## License
 
