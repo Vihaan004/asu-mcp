@@ -5,16 +5,38 @@ from __future__ import annotations
 from typing import Any
 
 
-def format_events(events: list[dict[str, Any]], *, described: str) -> str:
+def _coverage(result: dict[str, Any]) -> str:
+    """State what was actually searched, so 'nothing' is a real answer."""
+    if not result.get("scanned"):
+        return ""
+    return (
+        f"{result['scanned']} upcoming events "
+        f"({result['from_date']} to {result['to_date']})"
+    )
+
+
+def format_events(result: dict[str, Any], *, described: str) -> str:
+    events = result.get("events") or []
+    coverage = _coverage(result)
+
     if not events:
+        # Say what was checked. Otherwise a model reads an empty result as a
+        # tool failure, or tells the student ASU has nothing on at all.
+        scope = f" Searched {coverage}." if coverage else ""
         return (
-            f"No upcoming ASU events matched {described}. The calendar only "
-            "covers what's scheduled ahead, so try broader keywords or drop the "
-            "date filter."
+            f"No upcoming ASU events matched {described}.{scope} Only titles and "
+            "locations are searchable, so an event about this may exist under a "
+            "different name -- try a broader word, or drop the keywords to see "
+            "what's on."
         )
 
-    lines = [f"{len(events)} upcoming event(s) matching {described}:"]
-    current_day = None
+    header = f"{len(events)} upcoming event(s) matching {described}"
+    if result.get("relaxed"):
+        header += " (no event matched every word, so these match at least one)"
+    if coverage:
+        header += f", out of {coverage}"
+    lines = [f"{header}:"]
+    current_day: str | None = None
     for event in events:
         if event["date_display"] != current_day:
             current_day = event["date_display"]

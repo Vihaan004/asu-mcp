@@ -130,14 +130,19 @@ class EventsClient:
         on_date: str | None = None,
         through_date: str | None = None,
         limit: int = 15,
-        pages: int = 3,
-    ) -> list[dict[str, Any]]:
+        pages: int = 6,
+    ) -> dict[str, Any]:
         """Upcoming events, filtered client-side.
 
         The listing ignores a `search` query parameter -- it returns the same
         24 cards whatever you pass -- so every filter here is applied locally.
+
+        Returns the matches plus what was actually searched. A caller that only
+        gets an empty list cannot tell "ASU has no such event" from "this tool
+        is broken", and will happily tell a student the wrong one.
         """
-        rows = self.upcoming(pages=pages)
+        scanned = self.upcoming(pages=pages)
+        rows = scanned
 
         if on_date:
             rows = [r for r in rows if r["date"] == on_date]
@@ -146,13 +151,23 @@ class EventsClient:
         if campus:
             needle = campus.strip().lower()
             rows = [r for r in rows if needle in r["location"].lower()]
+
+        relaxed = False
         if keywords:
             terms = [t for t in keywords.lower().split() if t]
-            rows = [
-                r
-                for r in rows
-                if all(t in f"{r['title']} {r['location']}".lower() for t in terms)
-            ]
+
+            def haystack(row: dict[str, Any]) -> str:
+                # The slug is built from the untruncated title, so it recovers
+                # some of what the listing cut off.
+                return f"{row['title']} {row['location']} {row['slug'].replace('-', ' ')}".lower()
+
+            matched = [r for r in rows if all(t in haystack(r) for t in terms)]
+            if not matched and len(terms) > 1:
+                # Nothing matched every word; fall back to any word rather than
+                # reporting a bare nothing.
+                matched = [r for r in rows if any(t in haystack(r) for t in terms)]
+                relaxed = bool(matched)
+            rows = matched
 
         rows = rows[:limit]
 
@@ -166,7 +181,14 @@ class EventsClient:
                 if full.get("title"):
                     row["title"] = full["title"]
                     row["title_truncated"] = False
-        return rows
+
+        return {
+            "events": rows,
+            "scanned": len(scanned),
+            "from_date": scanned[0]["date"] if scanned else "",
+            "to_date": scanned[-1]["date"] if scanned else "",
+            "relaxed": relaxed,
+        }
 
 
 def today_iso() -> str:

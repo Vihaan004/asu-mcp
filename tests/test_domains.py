@@ -5,6 +5,7 @@ Markup below is copied from the real pages, trimmed to one record each.
 
 from asu_mcp.core import plain_text
 from asu_mcp.events.client import parse_listing
+from asu_mcp.events.format import format_events
 from asu_mcp.news.client import clean_summary, parse_search
 from asu_mcp.people.client import parse_people, rerank, score
 
@@ -69,6 +70,49 @@ class TestEventListing:
 
     def test_ignores_non_event_links(self):
         assert parse_listing('<a href="/about">About</a>') == []
+
+
+class TestEventResults:
+    """An empty result has to be distinguishable from a broken tool.
+
+    ASU really has no engineering-titled events over the next two months, so
+    'nothing matched' is often the correct answer -- it just has to say what it
+    checked, or a model reads it as a failure and tells the student the wrong
+    thing.
+    """
+
+    def test_empty_result_reports_what_was_searched(self):
+        text = format_events(
+            {"events": [], "scanned": 141, "from_date": "2026-07-26", "to_date": "2026-08-31"},
+            described="keywords engineering",
+        )
+        assert "141 upcoming events" in text
+        assert "2026-07-26 to 2026-08-31" in text
+        assert "titles and locations" in text
+
+    def test_empty_result_without_coverage_still_reads_sensibly(self):
+        text = format_events({"events": [], "scanned": 0}, described="anything upcoming")
+        assert "No upcoming ASU events" in text
+        assert "Searched" not in text
+
+    def test_hits_report_coverage(self):
+        row = parse_listing(EVENT_CARD)[0]
+        text = format_events(
+            {"events": [row], "scanned": 141, "from_date": "2026-07-26", "to_date": "2026-08-31"},
+            described="keywords research",
+        )
+        assert "1 upcoming event(s)" in text
+        assert "out of 141 upcoming events" in text
+        assert "Wed, Aug 5, 2026" in text
+        assert "Beginner's Guide to Research Computing" in text
+
+    def test_relaxed_match_is_labelled(self):
+        row = parse_listing(EVENT_CARD)[0]
+        text = format_events(
+            {"events": [row], "scanned": 141, "from_date": "a", "to_date": "b", "relaxed": True},
+            described="keywords research computing",
+        )
+        assert "match at least one" in text
 
 
 class TestNewsSearch:

@@ -37,13 +37,18 @@ def register(mcp: FastMCP) -> None:
     ) -> str:
         """Search upcoming events on ASU's university-wide calendar.
 
-        Covers the next few weeks: talks, workshops, info sessions, exhibitions,
-        club and athletics events. Returns date, time, location and a link.
+        Covers roughly the next two months: talks, workshops, info sessions,
+        exhibitions, club and athletics events. Returns date, time, location
+        and a link.
 
-        Only upcoming events are available -- this cannot search past events.
+        Keywords match event titles and locations only, not descriptions, so
+        prefer one broad word ('research', 'career') over a specific phrase.
+        The reply states how many events were searched and over what dates --
+        an empty result means nothing matched, not that the search failed.
+        Past events are not available.
         """
         try:
-            events = _client.search(
+            result = _client.search(
                 keywords=keywords,
                 campus=campus,
                 on_date=parse_date_input(on_date),
@@ -63,7 +68,7 @@ def register(mcp: FastMCP) -> None:
             ]
             if value
         ) or "anything upcoming"
-        return format_events(events, described=described)
+        return format_events(result, described=described)
 
     @mcp.tool()
     def get_event(

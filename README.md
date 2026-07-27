@@ -141,10 +141,12 @@ Two other things worth knowing if you build on this:
   named Root, Rootes and Root before anyone who does robotics. Results are
   over-fetched and re-ranked on whether query terms appear in title, expertise
   or research; a direct name lookup still wins outright.
-- **Event keyword search is client-side.** The calendar listing ignores a
-  `search` parameter — it returns the same 24 cards whatever you pass — so
-  filtering happens locally over the next few listing pages. That covers roughly
-  the next two weeks, not the whole calendar.
+- **Event keyword search is client-side, over titles only.** The calendar
+  listing ignores a `search` parameter — it returns the same 24 cards whatever
+  you pass — so filtering happens locally across roughly the next two months.
+  Descriptions are not searchable, so results say how many events were scanned
+  and over what dates: "no engineering events in the next 141" is a real answer,
+  and a model needs to be able to tell it apart from a failure.
 
 Responses are cached in memory — term and subject lists for six hours, searches
 for ten to thirty minutes. Long enough to be a good neighbour to ASU's servers,
