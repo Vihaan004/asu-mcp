@@ -67,15 +67,17 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "search":
             if not any([args.subject, args.catalog_number, args.keywords, args.instructor]):
                 parser.error("give a subject, keywords or an instructor")
-            payload = client.search_classes(
+            payload, searched_as = client.search_expanding(
                 resolved.code,
+                keywords=args.keywords,
                 subject=args.subject,
                 catalog_number=args.catalog_number,
-                keywords=args.keywords,
                 instructor=args.instructor,
                 campus=args.campus,
                 max_results=args.max_results,
             )
+            if searched_as:
+                print(f"(no match for {args.keywords!r}, searched as {searched_as!r})")
             print(format_search_results(payload, term_label=str(resolved), open_only=args.open_only))
             return 0
 

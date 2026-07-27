@@ -7,6 +7,7 @@ get answers from live university data instead of a search engine's guess.
 > "Who at ASU works on robotics, and how do I reach them?"
 > "Any research workshops on campus next week?"
 > "What has ASU published about semiconductors lately?"
+> "What does ASU actually do in sustainability?"
 
 No ASURITE, no login, nothing behind a wall — only data ASU already publishes
 openly.
@@ -57,17 +58,23 @@ your own box. `GET /health` is there for platform health checks, and
 
 ## Tools
 
-Eight tools on one connector. Four areas, deliberately not four connectors —
+Nine tools on one connector. Four areas, deliberately not four connectors —
 making students install one thing per campus system would recreate the
 fragmentation this exists to remove.
+
+**Everything at once**
+
+| Tool | |
+|---|---|
+| `search_asu` | One topic across all four sources in parallel: courses, researchers, upcoming events and news. For "what does ASU do in robotics" — one call instead of four. |
 
 **Classes** — ASU's live class schedule
 
 | Tool | |
 |---|---|
-| `search_classes` | Search by subject, course number, keywords, instructor, campus, days, times, level, units, honors. Optionally only sections with open seats. |
+| `search_classes` | Search by subject, course number, free-text query, instructor, campus, days, times, level, units, honors. Optionally only sections with open seats. |
 | `get_class` | One section in full: seats, room with campus map link, enrollment and drop/withdraw deadlines, consent and reserved-seat restrictions. |
-| `list_terms` | Available terms and their codes. |
+| `list_terms` | The current term and a few either side; `include_all` for all 71. |
 | `list_subjects` | The 343 subject codes for a term, so "computer science" resolves to `CSE`. |
 
 **People** — the public faculty and staff directory
@@ -137,16 +144,44 @@ Two other things worth knowing if you build on this:
 - **Term codes are opaque.** Fall 2026 is `2267`. Every tool accepts
   `"Fall 2026"` and defaults to the current term. Nothing should hardcode one.
 
+- **The sources disagree about abbreviations, in opposite directions.** The
+  catalog indexes official course titles, which are spelled out: in Fall 2026
+  `artificial intelligence` matches 30 sections and `AI` matches none. The
+  events calendar indexes what an organiser typed, which is where the
+  abbreviation lives: `AI` matches nine events and `artificial intelligence`
+  matches zero. Whichever form a student thinks in, one of the two would return
+  nothing. Every search now tries both and says which one matched.
 - **The directory fuzzy-matches surnames.** Searching `robotics` returns people
   named Root, Rootes and Root before anyone who does robotics. Results are
-  over-fetched and re-ranked on whether query terms appear in title, expertise
-  or research; a direct name lookup still wins outright.
+  over-fetched, re-ranked, and — new — dropped entirely when no query word
+  appears anywhere in the row, because sorting cannot fix a result set that is
+  all noise. A direct name lookup still wins outright.
+- **Conversational phrasing is stripped, not rejected.** The directory
+  AND-matches every token, so "someone who works on quantum computing at ASU"
+  used to relax to the literal words `works on` and return people surnamed
+  Works. Filler is removed server-side; a tool description asking the caller to
+  phrase queries carefully does not survive contact with a real student.
 - **Event keyword search is client-side, over titles only.** The calendar
   listing ignores a `search` parameter — it returns the same 24 cards whatever
   you pass — so filtering happens locally across roughly the next two months.
-  Descriptions are not searchable, so results say how many events were scanned
-  and over what dates: "no engineering events in the next 141" is a real answer,
-  and a model needs to be able to tell it apart from a failure.
+  Results say how many events were scanned and over what dates: "no engineering
+  events in the next 141" is a real answer, and a model needs to be able to
+  tell it apart from a failure.
+
+Two things this deliberately does **not** do:
+
+- **Search event descriptions.** It looks like the obvious fix for titles-only
+  matching, and the numbers say otherwise: only 40 of 141 upcoming events carry
+  a description at all, crawling every detail page costs ~30s, and for the
+  query that motivated it — `artificial intelligence` — it surfaced zero extra
+  events. Matching on body text also matched `ai` inside *available* and
+  *training*, returning all 141. Expanding abbreviations fixed the real case
+  for one extra request.
+- **Answer topic questions the directory cannot.** `quantum computing` returns
+  nobody, and the four rows `quantum` returns are all fuzzy surname matches.
+  Relaxing to `computing` produces a plausible, confidently wrong answer — a
+  security architecture director — so it stops and says the directory has
+  nobody indexed under those words.
 
 Responses are cached in memory — term and subject lists for six hours, searches
 for ten to thirty minutes. Long enough to be a good neighbour to ASU's servers,
@@ -165,7 +200,9 @@ uv run pytest
 Tests are fixture-based and never touch the network — a captured class-search
 response for CSE 310, Fall 2026 (11 sections mixing full and open, in-person and
 online, some with no scheduled meeting time) plus trimmed real markup for the
-events and news parsers.
+events and news parsers. Several pin behaviour that only showed up when a model
+drove the connector as a real client: the surname-fuzz filter, the query
+relaxation that must not reach `works on`, and the abbreviation expansion.
 
 To see what a model actually receives, and to catch a source that has changed
 shape, run every tool against live ASU data:

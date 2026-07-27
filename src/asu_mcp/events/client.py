@@ -21,6 +21,7 @@ from typing import Any
 from bs4 import BeautifulSoup
 
 from ..core import AsuApiError, AsuHttpClient
+from ..query import expand, matches, matches_any
 
 BASE = "https://asuevents.asu.edu"
 LISTING_TTL = 30 * 60
@@ -131,6 +132,7 @@ class EventsClient:
         through_date: str | None = None,
         limit: int = 15,
         pages: int = 6,
+        relax: bool = True,
     ) -> dict[str, Any]:
         """Upcoming events, filtered client-side.
 
@@ -153,21 +155,36 @@ class EventsClient:
             rows = [r for r in rows if needle in r["location"].lower()]
 
         relaxed = False
+        matched_as = ""
         if keywords:
-            terms = [t for t in keywords.lower().split() if t]
 
             def haystack(row: dict[str, Any]) -> str:
                 # The slug is built from the untruncated title, so it recovers
                 # some of what the listing cut off.
-                return f"{row['title']} {row['location']} {row['slug'].replace('-', ' ')}".lower()
+                return f"{row['title']} {row['location']} {row['slug'].replace('-', ' ')}"
 
-            matched = [r for r in rows if all(t in haystack(r) for t in terms)]
-            if not matched and len(terms) > 1:
-                # Nothing matched every word; fall back to any word rather than
-                # reporting a bare nothing.
-                matched = [r for r in rows if any(t in haystack(r) for t in terms)]
-                relaxed = bool(matched)
-            rows = matched
+            # Organisers title events with abbreviations ('AI Upskilling Office
+            # Hours'), students ask in full. Try every form before giving up.
+            variants = expand(keywords)
+            found: list[dict[str, Any]] = []
+            for variant in variants:
+                found = [r for r in rows if matches(haystack(r), variant)]
+                if found:
+                    matched_as = variant
+                    break
+
+            if not found and relax:
+                # Nothing matched every word in any form; fall back to any word
+                # rather than reporting a bare nothing. Callers that cannot
+                # label the looser match turn this off -- 'quantum computing'
+                # relaxes to every Research Computing office hour on the
+                # calendar, which is noise wearing the shape of an answer.
+                for variant in variants:
+                    found = [r for r in rows if matches_any(haystack(r), variant)]
+                    if found:
+                        matched_as, relaxed = variant, True
+                        break
+            rows = found
 
         rows = rows[:limit]
 
@@ -188,6 +205,14 @@ class EventsClient:
             "from_date": scanned[0]["date"] if scanned else "",
             "to_date": scanned[-1]["date"] if scanned else "",
             "relaxed": relaxed,
+            # Only set when a rewritten form is what actually matched, so the
+            # reply can say "searched as AI" instead of silently answering a
+            # different question than the one asked.
+            "matched_as": (
+                matched_as
+                if matched_as and matched_as.lower() != (keywords or "").strip().lower()
+                else ""
+            ),
         }
 
 

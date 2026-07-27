@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..core import AsuApiError, AsuHttpClient, TTLCache
+from ..query import expand
 
 API_ROOT = "https://eadvs-cscc-catalog-api.apps.asu.edu/catalog-microservices/api/v1/search"
 
@@ -38,6 +39,20 @@ class Term:
 
     def __str__(self) -> str:
         return f"{self.label} ({self.code})" if self.label else self.code
+
+
+def window(terms: list[Term], current: str, span: int = 3) -> list[Term]:
+    """The current term plus `span` either side of it.
+
+    The full list runs from 2007 to 2029 -- about seventy rows, nearly all of
+    them expired, for a question whose answer is almost always 'this one'.
+    Terms arrive newest-first, so a window either side spans the next few
+    semesters and the ones that just ended.
+    """
+    if not terms:
+        return []
+    index = next((i for i, term in enumerate(terms) if term.code == current), 0)
+    return terms[max(0, index - span) : index + span + 1]
 
 
 class ClassSearchClient:
@@ -212,3 +227,28 @@ class ClassSearchClient:
             "aggregations": data.get("aggregations") or {},
             "truncated": total > len(classes[:max_results]),
         }
+
+    def search_expanding(
+        self, term_code: str, *, keywords: str | None = None, **kwargs: Any
+    ) -> tuple[dict[str, Any], str]:
+        """search_classes, retrying the query in its other written forms.
+
+        The catalog indexes official course titles, which are always spelled
+        out: in Fall 2026 'artificial intelligence' matches 30 sections and
+        'AI' matches none. A student who types the abbreviation gets nothing,
+        with no hint that the same question phrased differently works.
+
+        Returns (payload, searched_as); searched_as is empty unless a rewritten
+        form is what actually produced the results.
+        """
+        payload = self.search_classes(term_code, keywords=keywords, **kwargs)
+        if payload.get("classes") or not keywords:
+            return payload, ""
+
+        for variant in expand(keywords)[1:]:
+            alternative = self.search_classes(term_code, keywords=variant, **kwargs)
+            if alternative.get("classes"):
+                return alternative, variant
+        # Nothing matched in any form; report the query the student actually
+        # asked, not the last variant tried.
+        return payload, ""

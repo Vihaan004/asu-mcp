@@ -7,11 +7,9 @@ from typing import Annotated
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
+from ..clients import news as _client
 from ..core import AsuApiError
-from .client import NewsClient
 from .format import format_news
-
-_client = NewsClient()
 
 
 def register(mcp: FastMCP) -> None:
@@ -33,7 +31,11 @@ def register(mcp: FastMCP) -> None:
         """Search ASU's newsroom for university news and research stories.
 
         Covers what ASU itself published: research announcements, student and
-        faculty stories, university news. Newest first.
+        faculty stories, university news.
+
+        Results keep the newsroom's own relevance order, which ranks on full
+        article text. A story whose headline looks unrelated is marked with
+        what actually matched, so a tangential hit is visible as one.
         """
         try:
             stories = (
@@ -41,4 +43,8 @@ def register(mcp: FastMCP) -> None:
             )
         except AsuApiError as exc:
             return f"Error: {exc}"
-        return format_news(stories, described=f"'{query}'" if query else "the latest news")
+        return format_news(
+            stories,
+            described=f"'{query}'" if query else "the latest news",
+            query=query,
+        )

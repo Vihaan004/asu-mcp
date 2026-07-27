@@ -12,14 +12,22 @@ def _truncate(text: str | None, limit: int) -> str:
     return clean if len(clean) <= limit else clean[: limit - 1].rstrip() + "…"
 
 
-def format_people(people: list[dict[str, Any]], *, query: str) -> str:
+def format_people(
+    people: list[dict[str, Any]], *, query: str, searched_as: str = ""
+) -> str:
     if not people:
         return (
-            f"Nobody in the ASU directory matched '{query}'. Try just a surname, "
-            "a department, or a research topic."
+            f"Nobody in the ASU directory matched '{query}'. The directory "
+            "indexes names, titles, departments and stated expertise -- it is "
+            "not a full-text search of what people work on, so a broad topic "
+            "can genuinely return nothing. Try a surname, a department, or the "
+            "exact phrase someone would list as their expertise."
         )
 
-    lines = [f"{len(people)} match(es) for '{query}':"]
+    header = f"{len(people)} match(es) for '{query}'"
+    if searched_as:
+        header += f" (searched as '{searched_as}')"
+    lines = [f"{header}:"]
     for person in people:
         lines.append(f"\n{person['name']}")
         if person.get("title"):

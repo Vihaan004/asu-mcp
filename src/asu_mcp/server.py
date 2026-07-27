@@ -22,6 +22,7 @@ from .classes.tools import register as register_classes
 from .events.tools import register as register_events
 from .news.tools import register as register_news
 from .people.tools import register as register_people
+from .topic import register as register_topic
 
 INSTRUCTIONS = """\
 Arizona State University's public data, live. Four areas:
@@ -33,6 +34,14 @@ published contact details.
 - Events: the university-wide calendar of upcoming talks, workshops and \
 info sessions.
 - News: stories ASU's own newsroom published.
+
+For a broad topic question, start with search_asu -- it covers all four at once. \
+Use the individual tools when the question is already narrow.
+
+Queries are passed through as the student phrased them. Abbreviations are \
+expanded in both directions ('AI' also tries 'artificial intelligence', and the \
+reverse), because ASU's sources disagree about which form they index, and \
+conversational filler is stripped before searching.
 
 Class term codes are opaque four-digit numbers (Fall 2026 is 2267). Never guess \
 one -- the tools accept plain labels like 'Fall 2026' and default to the current \
@@ -70,6 +79,7 @@ def build_server(transport: str = "stdio") -> FastMCP:
         port=int(os.environ.get("PORT", "8000")),
     )
 
+    register_topic(mcp)
     register_classes(mcp)
     register_people(mcp)
     register_events(mcp)

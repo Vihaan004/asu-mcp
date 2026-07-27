@@ -12,19 +12,31 @@ import sys
 from asu_mcp.server import mcp
 
 CASES: list[tuple[str, dict]] = [
+    ("search_asu", {"topic": "robotics"}),
     ("search_classes", {"subject": "CSE", "catalog_number": "310", "open_only": True}),
-    ("search_classes", {"keywords": "machine learning", "open_only": True, "max_results": 6}),
+    ("search_classes", {"query": "machine learning", "open_only": True, "max_results": 6}),
+    # The catalog indexes spelled-out course titles, so this only works expanded.
+    ("search_classes", {"query": "AI", "max_results": 4}),
     ("get_class", {"class_number": "66445"}),
     ("list_terms", {}),
     ("search_people", {"query": "robotics", "limit": 3}),
     ("search_people", {"query": "who is professor Yezhou Yang at ASU", "limit": 2}),
+    ("search_people", {"query": "someone who works on quantum computing at ASU", "limit": 3}),
     ("search_events", {"limit": 6}),
-    ("search_events", {"keywords": "research", "limit": 4}),
+    ("search_events", {"query": "research", "limit": 4}),
+    # ...and this only works contracted: organisers title these events 'AI'.
+    ("search_events", {"query": "artificial intelligence", "limit": 3}),
     ("get_event", {"url": ""}),  # filled in from search_events below
     ("search_news", {"query": "robotics", "limit": 3}),
 ]
 
-TRIM = {"list_terms": 12, "search_classes": 40, "search_people": 40, "search_news": 40}
+TRIM = {
+    "list_terms": 12,
+    "search_classes": 40,
+    "search_people": 40,
+    "search_news": 40,
+    "search_asu": 40,
+}
 
 
 async def call(name: str, args: dict) -> str:

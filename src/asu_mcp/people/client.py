@@ -11,6 +11,7 @@ import re
 from typing import Any
 
 from ..core import AsuApiError, AsuHttpClient, plain_text
+from ..query import expand
 
 API_ROOT = "https://search.asu.edu/api/v1"
 PROFILE_BASE = "https://search.asu.edu/profile/"
@@ -42,14 +43,37 @@ def _joined(value: Any) -> str | None:
 
 # The directory AND-matches every query token, so one stray word from a
 # conversational phrasing ("who is Aman Arora at ASU") returns nothing at all.
-# Domain words (professor, robotics) are deliberately kept -- they match real
-# title and expertise fields.
+# Asking a model to phrase queries carefully does not work -- it phrases them
+# the way the student did -- so the filler is stripped here instead.
+#
+# Field words are deliberately KEPT: robotics, research, lab, school,
+# department, studies and instructor all match real title, department and
+# expertise values, and dropping them would widen a narrow query.
 _STOPWORDS = frozenset({
-    "who", "whos", "is", "are", "was", "the", "a", "an", "me", "my", "about",
-    "tell", "find", "what", "whats", "search", "for", "please", "can", "could",
-    "you", "show", "of", "to", "do", "does", "know", "any", "someone", "person",
-    "people", "professor",
-    # Org words never narrow an ASU-only directory; they only break the match.
+    # question and request framing
+    "who", "whos", "whose", "whom", "what", "whats", "which", "where", "when",
+    "how", "why", "is", "are", "was", "were", "be", "been", "being", "am",
+    "has", "have", "had", "do", "does", "did", "can", "could", "will", "would",
+    "shall", "should", "may", "might", "must",
+    "tell", "find", "search", "show", "list", "give", "get", "know", "help",
+    "need", "needs", "want", "wants", "looking", "look", "please", "thanks",
+    # pronouns, articles, prepositions -- 'at' and 'on' are the ones that
+    # actually broke real queries
+    "a", "an", "the", "i", "me", "my", "we", "us", "our", "you", "your",
+    "he", "she", "it", "they", "them", "their", "his", "her", "its",
+    "at", "on", "in", "into", "of", "to", "for", "from", "by", "with", "about",
+    "and", "or", "as", "that", "this", "these", "those", "there", "here",
+    "any", "all", "some", "more", "most", "best", "top", "good", "great",
+    "currently", "also", "well",
+    # people-shaped filler
+    "someone", "somebody", "anyone", "anybody", "person", "people", "faculty",
+    "staff", "member", "members", "professor", "professors", "prof", "dr",
+    "teaches", "teaching", "teacher", "expert", "experts", "expertise",
+    "works", "work", "working", "worked", "studying",
+    "focuses", "focused", "focusing", "specializes", "specializing",
+    # contact-intent words: they ask for a field, they do not narrow the search
+    "contact", "email", "phone", "reach",
+    # org words never narrow an ASU-only directory; they only break the match
     "asu", "arizona", "state", "university",
 })
 
@@ -59,21 +83,61 @@ def _clean(query: str) -> str:
     return " ".join(t for t in tokens if t.lower() not in _STOPWORDS)
 
 
+def _name_run(query: str) -> str:
+    """The longest run of consecutive capitalised non-filler words.
+
+    'who is professor Yezhou Yang at ASU' -> 'Yezhou Yang'. Only a hint: it
+    needs the student to have capitalised the name, which is why it sits behind
+    the cleaned query rather than in front of it.
+    """
+    best: list[str] = []
+    current: list[str] = []
+    for token in re.findall(r"[A-Za-z'-]+", query):
+        if token[:1].isupper() and token.lower() not in _STOPWORDS:
+            current.append(token)
+        else:
+            best = max(best, current, key=len)
+            current = []
+    best = max(best, current, key=len)
+    return " ".join(best) if len(best) >= 2 else ""
+
+
 def _candidates(query: str) -> list[str]:
     """Progressively relaxed query variants, most specific first.
 
-    raw -> filler stripped -> first two tokens (a person lookup leads with the
-    name). We stop at the first variant that returns anything.
+    raw -> filler stripped -> capitalised name -> abbreviation expanded ->
+    leading two words. We stop at the first variant that returns anything.
+
+    The order matters more than it looks. An earlier version dropped straight
+    to the first two tokens of the raw query, so 'someone who works on quantum
+    computing' relaxed to 'works on' and confidently returned people with the
+    surname Works.
     """
     out: list[str] = []
     seen: set[str] = set()
+
+    def add(candidate: str) -> None:
+        cleaned = " ".join((candidate or "").split())
+        if cleaned and cleaned.lower() not in seen:
+            seen.add(cleaned.lower())
+            out.append(cleaned)
+
     cleaned = _clean(query)
+    add(query)
+    add(cleaned)
+    add(_name_run(query))
+    for variant in expand(cleaned)[1:]:
+        add(variant)
     tokens = cleaned.split()
-    for candidate in [query.strip(), cleaned, " ".join(tokens[:2]) if len(tokens) > 2 else ""]:
-        key = candidate.lower()
-        if candidate and key not in seen:
-            seen.add(key)
-            out.append(candidate)
+    if len(tokens) > 2:
+        # Drops trailing qualifiers and keeps the head concept, so
+        # 'computer architecture accelerators' relaxes to 'computer
+        # architecture'.
+        add(" ".join(tokens[:2]))
+    # Deliberately no single-word relaxation. In an English topic the first
+    # word carries the specificity, so 'quantum computing' would relax to
+    # 'computing' and return a security architecture director -- an answer to
+    # a question nobody asked, and harder to catch than an empty result.
     return out
 
 
@@ -147,6 +211,33 @@ def score(person: dict[str, Any], query: str) -> int:
     return total
 
 
+def explains(person: dict[str, Any], query: str) -> bool:
+    """Can we point at why this row came back at all?
+
+    The endpoint fuzzy-matches surnames: 'quantum' returns Steve Quintua,
+    Quantae Oliver and Ashley Quintus, and nothing else -- four rows in total,
+    none of which contain the word. Reranking can only sort what it is given,
+    so these still surface, and a model presents them as ASU's quantum people.
+
+    A row survives only if some query word is visible somewhere in it. When
+    that leaves nothing, 'nobody matched' is the honest answer.
+    """
+    terms = [t for t in re.findall(r"[a-z0-9]+", query.lower()) if len(t) > 2]
+    if not terms:
+        return True
+    visible = " ".join(
+        [
+            person.get("name") or "",
+            person.get("title") or "",
+            " ".join(person.get("expertise_areas") or []),
+            " ".join(person.get("departments") or []),
+            person.get("research_interests") or "",
+            person.get("short_bio") or "",
+        ]
+    ).lower()
+    return any(term in visible for term in terms)
+
+
 def rerank(people: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
     """Sort by relevance, keeping the directory's order within equal scores."""
     return [
@@ -165,8 +256,13 @@ class PeopleClient:
     def close(self) -> None:
         self._http.close()
 
-    def search(self, query: str, size: int = 8) -> list[dict[str, Any]]:
-        """Search the directory, relaxing the query until something matches."""
+    def search(self, query: str, size: int = 8) -> tuple[list[dict[str, Any]], str]:
+        """Search the directory, relaxing the query until something matches.
+
+        Returns (people, searched_as). searched_as is empty unless a rewritten
+        query is what produced the results -- a student who asked one thing and
+        is shown the answer to another deserves to be told.
+        """
         if not query.strip():
             raise AsuApiError("give a name, department or research topic to search for")
 
@@ -185,7 +281,10 @@ class PeopleClient:
                 },
                 ttl=SEARCH_TTL,
             )
-            people = parse_people(payload)
+            people = [p for p in parse_people(payload) if explains(p, candidate)]
             if people:
-                return rerank(people, candidate)[:size]
-        return []
+                searched_as = (
+                    "" if candidate.strip().lower() == query.strip().lower() else candidate
+                )
+                return rerank(people, candidate)[:size], searched_as
+        return [], ""

@@ -25,12 +25,14 @@ def format_events(result: dict[str, Any], *, described: str) -> str:
         scope = f" Searched {coverage}." if coverage else ""
         return (
             f"No upcoming ASU events matched {described}.{scope} Only titles and "
-            "locations are searchable, so an event about this may exist under a "
-            "different name -- try a broader word, or drop the keywords to see "
-            "what's on."
+            "locations are searchable -- not descriptions -- so an event about "
+            "this may exist under a different name. Try one broader word, or "
+            "drop the keywords to see what's on."
         )
 
     header = f"{len(events)} upcoming event(s) matching {described}"
+    if result.get("matched_as"):
+        header += f" (searched as '{result['matched_as']}')"
     if result.get("relaxed"):
         header += " (no event matched every word, so these match at least one)"
     if coverage:

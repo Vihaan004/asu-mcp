@@ -7,19 +7,23 @@ from typing import Annotated
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
+from ..clients import events as _client
 from ..core import AsuApiError
-from .client import EventsClient, parse_date_input
+from .client import parse_date_input
 from .format import format_event_detail, format_events
-
-_client = EventsClient()
 
 
 def register(mcp: FastMCP) -> None:
     @mcp.tool()
     def search_events(
-        keywords: Annotated[
+        query: Annotated[
             str | None,
-            Field(description="Words that must all appear in the title or location."),
+            Field(
+                description=(
+                    "Topic words, matched against event titles and locations. "
+                    "Abbreviations are expanded automatically, both ways."
+                )
+            ),
         ] = None,
         campus: Annotated[
             str | None,
@@ -41,15 +45,19 @@ def register(mcp: FastMCP) -> None:
         exhibitions, club and athletics events. Returns date, time, location
         and a link.
 
-        Keywords match event titles and locations only, not descriptions, so
-        prefer one broad word ('research', 'career') over a specific phrase.
+        The query matches event titles and locations only -- descriptions are
+        not searchable -- so prefer one broad word ('research', 'career') over
+        a specific phrase. Abbreviations are handled for you in both
+        directions: 'artificial intelligence' also tries 'AI', and the reply
+        says which form matched.
+
         The reply states how many events were searched and over what dates --
         an empty result means nothing matched, not that the search failed.
         Past events are not available.
         """
         try:
             result = _client.search(
-                keywords=keywords,
+                keywords=query,
                 campus=campus,
                 on_date=parse_date_input(on_date),
                 through_date=parse_date_input(through_date),
@@ -61,7 +69,7 @@ def register(mcp: FastMCP) -> None:
         described = ", ".join(
             f"{label} {value}"
             for label, value in [
-                ("keywords", keywords),
+                ("keywords", query),
                 ("campus", campus),
                 ("on", on_date),
                 ("through", through_date),

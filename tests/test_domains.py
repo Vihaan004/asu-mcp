@@ -7,7 +7,16 @@ from asu_mcp.core import plain_text
 from asu_mcp.events.client import parse_listing
 from asu_mcp.events.format import format_events
 from asu_mcp.news.client import clean_summary, parse_search
-from asu_mcp.people.client import parse_people, rerank, score
+from asu_mcp.news.format import relevance
+from asu_mcp.people.client import (
+    _candidates,
+    _clean,
+    _name_run,
+    explains,
+    parse_people,
+    rerank,
+    score,
+)
 
 EVENT_CARD = """
 <ul><li class="card cards-components card-event">
@@ -114,6 +123,16 @@ class TestEventResults:
         )
         assert "match at least one" in text
 
+    def test_says_when_a_rewritten_query_is_what_matched(self):
+        # Asking for 'artificial intelligence' and being shown events titled
+        # 'AI ...' is only trustworthy if the swap is stated.
+        row = parse_listing(EVENT_CARD)[0]
+        text = format_events(
+            {"events": [row], "scanned": 141, "from_date": "a", "to_date": "b", "matched_as": "AI"},
+            described="keywords artificial intelligence",
+        )
+        assert "searched as 'AI'" in text
+
 
 class TestNewsSearch:
     def test_extracts_a_story(self):
@@ -173,7 +192,84 @@ class TestPeople:
         other = {"name": "Someone Else", "title": "Yang Lab Manager", "expertise_areas": [], "departments": []}
         assert rerank([other, target], "Yezhou Yang")[0]["name"] == "Yezhou Yang"
 
+    def test_unexplainable_fuzzy_surname_rows_are_dropped(self):
+        # Live: 'quantum' returns Quintua, Quintus and Quantae -- four rows,
+        # none containing the word. Sorting them is not enough.
+        stub = {"name": "Steve Quintua", "title": None, "expertise_areas": [], "departments": []}
+        assert not explains(stub, "quantum")
+
+    def test_a_row_survives_on_any_visible_field(self):
+        person = {"name": "A B", "title": None, "expertise_areas": ["Quantum Information"], "departments": []}
+        assert explains(person, "quantum computing")
+
+    def test_a_name_match_always_survives(self):
+        person = {"name": "Christian Arenz", "title": None, "expertise_areas": [], "departments": []}
+        assert explains(person, "Christian Arenz quantum computing")
+
     def test_ranking_is_stable_when_nothing_matches(self):
         a = {"name": "A", "title": "T", "expertise_areas": [], "departments": []}
         b = {"name": "B", "title": "T", "expertise_areas": [], "departments": []}
         assert [p["name"] for p in rerank([a, b], "zzz")] == ["A", "B"]
+
+
+class TestPeopleQueryRelaxation:
+    """A student's phrasing has to survive the trip to an AND-matching API.
+
+    The live failure: 'can you find me someone who works on quantum computing
+    at ASU' relaxed to the literal words 'works on', and the directory answered
+    with Cody Works and Tiffany Works.
+    """
+
+    CONVERSATIONAL = "can you find me someone who works on quantum computing at ASU"
+
+    def test_filler_is_stripped_down_to_the_topic(self):
+        assert _clean(self.CONVERSATIONAL).lower() == "quantum computing"
+
+    def test_no_variant_is_a_bare_verb_phrase(self):
+        variants = [c.lower() for c in _candidates(self.CONVERSATIONAL)]
+        assert "works on" not in variants
+        assert "quantum computing" in variants
+
+    def test_never_relaxes_to_the_tail_of_a_topic(self):
+        # 'computing' alone answers a different question and looks plausible
+        # doing it; an empty result is the safer failure.
+        assert "computing" not in [c.lower() for c in _candidates(self.CONVERSATIONAL)]
+
+    def test_trailing_qualifiers_are_dropped_but_the_head_survives(self):
+        assert "computer architecture" in _candidates("computer architecture accelerators")
+
+    def test_at_is_filler(self):
+        # 'at' was the specific word missing from the stopword list.
+        assert _clean("who is professor Yezhou Yang at ASU") == "Yezhou Yang"
+
+    def test_a_name_survives_conversational_phrasing(self):
+        assert "Yezhou Yang" in _candidates("who is professor Yezhou Yang at ASU")
+
+    def test_name_run_finds_a_capitalised_name(self):
+        assert _name_run("tell me about Michel Kinsy at ASU") == "Michel Kinsy"
+
+    def test_name_run_ignores_a_single_capital(self):
+        assert _name_run("Robotics research") == ""
+
+    def test_abbreviations_are_offered_as_a_fallback(self):
+        # The expansion replaces the abbreviation and keeps the rest.
+        assert "artificial intelligence research" in _candidates("who does AI research")
+
+
+class TestNewsRelevance:
+    """The newsroom ranks on full article text, which is invisible here."""
+
+    def test_flags_a_story_whose_headline_shows_nothing(self):
+        story = {"title": "Breaking through the quantum noise barrier", "summary": "", "section": ""}
+        assert "article text" in relevance(story, "machine learning")
+
+    def test_silent_when_the_headline_carries_the_query(self):
+        story = {"title": "ASU researchers advance machine learning", "summary": "", "section": ""}
+        assert relevance(story, "machine learning") == ""
+
+    def test_names_the_partial_match(self):
+        story = {"title": "A new approach to learning", "summary": "", "section": ""}
+        assert relevance(story, "machine learning") == "headline/summary matches only: learning"
+
+    def test_no_query_means_no_note(self):
+        assert relevance({"title": "x", "summary": "", "section": ""}, None) == ""

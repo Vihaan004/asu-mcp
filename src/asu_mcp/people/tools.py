@@ -7,11 +7,9 @@ from typing import Annotated
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
+from ..clients import people as _client
 from ..core import AsuApiError
-from .client import PeopleClient
 from .format import format_people
-
-_client = PeopleClient()
 
 
 def register(mcp: FastMCP) -> None:
@@ -21,9 +19,9 @@ def register(mcp: FastMCP) -> None:
             str,
             Field(
                 description=(
-                    "A name, department, or research topic. Keep it short -- the "
-                    "directory matches every word, so 'Yezhou Yang' works and "
-                    "'who is professor Yezhou Yang at ASU' does not."
+                    "A name, department, or research topic. A student's own "
+                    "phrasing is fine -- filler words are stripped and "
+                    "abbreviations expanded before searching."
                 )
             ),
         ],
@@ -36,9 +34,14 @@ def register(mcp: FastMCP) -> None:
         Returns names, titles, departments, published contact details, research
         interests and profile links. Use it to find who works on a topic, or to
         look up one person a student already named.
+
+        Name lookups are reliable. Topic lookups depend on the person having
+        listed that expertise, so an empty result means the directory has
+        nobody indexed under those words -- not that ASU has nobody. When a
+        relaxed form of the query is what matched, the reply says so.
         """
         try:
-            people = _client.search(query, size=limit)
+            people, searched_as = _client.search(query, size=limit)
         except AsuApiError as exc:
             return f"Error: {exc}"
-        return format_people(people, query=query)
+        return format_people(people, query=query, searched_as=searched_as)

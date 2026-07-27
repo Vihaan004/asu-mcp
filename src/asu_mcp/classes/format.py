@@ -178,15 +178,26 @@ def _seats(row: dict[str, Any]) -> str:
     return text
 
 
+def _campus_name(text: str) -> str:
+    """Resolve a campus code or display name to one canonical name."""
+    key = text.strip().upper().replace(" ", "")
+    if key in CAMPUSES:
+        return CAMPUSES[key]
+    return next((v for v in CAMPUSES.values() if v.upper().replace(" ", "") == key), "")
+
+
 def _where(row: dict[str, Any]) -> str:
     if row["campus"] == "ASU Online":
         return "ASU Online"
     campus, room = row["campus"], row["room"]
-    # LOCATIONBUILDING names already carry the campus ("Tempe - PSH153"),
-    # so print it once rather than "Tempe · Tempe - PSH153".
-    prefix = f"{campus} - "
-    if campus and room.lower().startswith(prefix.lower()):
-        room = room[len(prefix) :]
+    # LOCATIONBUILDING names carry a campus prefix, sometimes as the display
+    # name ('Tempe - PSH153') and sometimes as the raw code ('Dtphx - UCENT238').
+    # Drop it only when it is this section's own campus: a section listed at
+    # Downtown Phoenix that meets in 'Tempe - BYENG209' really does meet on
+    # Tempe campus, and that is the more useful half.
+    head, separator, tail = room.partition(" - ")
+    if separator and campus and _campus_name(head) == campus:
+        room = tail
     parts = [p for p in [campus, room] if p]
     return " · ".join(parts) or "location TBA"
 

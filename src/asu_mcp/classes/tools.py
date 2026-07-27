@@ -7,30 +7,50 @@ from typing import Annotated
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
+from ..clients import classes as _client
 from ..core import AsuApiError
-from .client import ClassSearchClient
+from .client import window
 from .format import format_class_detail, format_search_results
-
-_client = ClassSearchClient()
 
 
 def register(mcp: FastMCP) -> None:
     @mcp.tool()
-    def list_terms() -> str:
-        """List ASU terms available in class search, with their term codes.
+    def list_terms(
+        include_all: Annotated[
+            bool,
+            Field(
+                description=(
+                    "Return every term back to 2007 and forward to 2029. Off by "
+                    "default; only useful for historical catalog questions."
+                )
+            ),
+        ] = False,
+    ) -> str:
+        """List the ASU terms you can search, with their term codes.
+
+        Defaults to the current term plus the three either side of it, which is
+        what almost every question needs -- the full list is about seventy rows
+        of mostly-expired semesters. Pass include_all for the rest.
 
         Use when the user names a semester you are unsure about, or asks what
-        can be searched. The current term is marked.
+        can be searched.
         """
         try:
             terms, current = _client.terms()
         except AsuApiError as exc:
             return f"Error: {exc}"
+
+        shown = terms if include_all else window(terms, current)
         lines = [f"Current term: {current}", ""]
         lines += [
             f"  {t.code}  {t.label}{'  <- current' if t.code == current else ''}"
-            for t in terms
+            for t in shown
         ]
+        if len(shown) < len(terms):
+            lines.append(
+                f"\nShowing {len(shown)} of {len(terms)} terms. "
+                "Call list_terms(include_all=True) for every term."
+            )
         return "\n".join(lines)
 
     @mcp.tool()
@@ -66,8 +86,16 @@ def register(mcp: FastMCP) -> None:
         catalog_number: Annotated[
             str | None, Field(description="Course number, e.g. '310'. Needs subject to be useful.")
         ] = None,
-        keywords: Annotated[
-            str | None, Field(description="Free text over title, description and instructor.")
+        query: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Free text over course title and description. Abbreviations "
+                    "are expanded automatically ('AI' also tries 'artificial "
+                    "intelligence'), which matters because the catalog indexes "
+                    "official course titles and those are always spelled out."
+                )
+            ),
         ] = None,
         instructor: Annotated[
             str | None, Field(description="Instructor last or full name.")
@@ -104,21 +132,21 @@ def register(mcp: FastMCP) -> None:
         Returns each matching section with its class number, meeting pattern,
         instructor, location and current seat count, grouped by course.
 
-        Give at least one of subject, catalog_number, keywords or instructor.
+        Give at least one of subject, catalog_number, query or instructor.
         The class number in the results is what a student enters in My ASU.
         """
-        if not any([subject, catalog_number, keywords, instructor]):
+        if not any([subject, catalog_number, query, instructor]):
             return (
-                "Error: give at least one of subject, catalog_number, keywords "
+                "Error: give at least one of subject, catalog_number, query "
                 "or instructor. Searching a whole term at once is not supported."
             )
         try:
             resolved = _client.resolve_term(term)
-            payload = _client.search_classes(
+            payload, searched_as = _client.search_expanding(
                 resolved.code,
+                keywords=query,
                 subject=subject,
                 catalog_number=catalog_number,
-                keywords=keywords,
                 instructor=instructor,
                 campus=campus,
                 days_of_week=days_of_week,
@@ -131,7 +159,13 @@ def register(mcp: FastMCP) -> None:
             )
         except AsuApiError as exc:
             return f"Error: {exc}"
-        return format_search_results(payload, term_label=str(resolved), open_only=open_only)
+
+        text = format_search_results(
+            payload, term_label=str(resolved), open_only=open_only
+        )
+        if searched_as:
+            text = f"(no match for '{query}', searched as '{searched_as}')\n{text}"
+        return text
 
     @mcp.tool()
     def get_class(

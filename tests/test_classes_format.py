@@ -9,7 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from asu_mcp.classes.format import format_class_detail, format_search_results, normalize
+from asu_mcp.classes.format import (
+    _where,
+    format_class_detail,
+    format_search_results,
+    normalize,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "classes_cse310_2267.json"
 
@@ -112,6 +117,22 @@ def test_all_full_reports_that_rather_than_empty(payload):
     full_only["total"] = len(full_only["classes"])
     text = format_search_results(full_only, term_label="Fall 2026 (2267)", open_only=True)
     assert "all full" in text
+
+
+def test_room_does_not_repeat_the_campus():
+    """Live output read 'Downtown Phoenix · Dtphx - UCENT238'.
+
+    The building prefix arrives as a code, not the display name, so matching
+    on the display name alone left it in.
+    """
+    row = {"campus": "Downtown Phoenix", "room": "Dtphx - UCENT238", "map_url": ""}
+    assert _where(row) == "Downtown Phoenix · UCENT238"
+
+
+def test_a_room_on_another_campus_keeps_its_own_name():
+    """BMI 598 is listed at Downtown Phoenix but meets in Tempe - BYENG209."""
+    row = {"campus": "Downtown Phoenix", "room": "Tempe - BYENG209", "map_url": ""}
+    assert _where(row) == "Downtown Phoenix · Tempe - BYENG209"
 
 
 def test_class_detail_includes_deadlines_and_seats(lecture):
