@@ -15,21 +15,7 @@ or endorsed by Arizona State University.
 
 ## Use it
 
-### claude.ai (no install)
-
-Settings → Connectors → **Add custom connector**, and paste:
-
-```
-<DEPLOYED_URL>/mcp
-```
-
-Custom connectors work on Free, Pro, Max, Team and Enterprise plans (Free is
-limited to one). Nothing to download, nothing to configure.
-
-### Run it yourself
-
-If the hosted instance is down, retired, or you would simply rather not depend
-on someone else's server, everything runs locally with no code changes.
+### Claude Desktop or Claude Code
 
 **Claude Code**
 
@@ -50,18 +36,23 @@ claude mcp add asu -- uvx --from git+https://github.com/Vihaan004/asu-mcp asu-mc
 }
 ```
 
-Local runs default to stdio. The only difference from the hosted instance is
-transport — same tools, same data.
+### claude.ai as a custom connector
 
-### Host your own
+claude.ai talks to remote MCP servers over HTTP, so this has to be running
+somewhere reachable first. There is **no public hosted instance yet** — host it
+yourself and it works today:
 
 ```bash
 docker build -t asu-mcp . && docker run -p 8000:8000 asu-mcp
 ```
 
+Then point Settings → Connectors → **Add custom connector** at
+`https://your-host/mcp`. Custom connectors are available on Free, Pro, Max,
+Team and Enterprise plans (Free is limited to one).
+
 Plain Docker on purpose: the same image runs on Railway, Render, Fly, Koyeb or
-your own box. Set `ASU_MCP_TRANSPORT=stdio` to get the local behaviour instead.
-`GET /health` is there for platform health checks.
+your own box. `GET /health` is there for platform health checks, and
+`ASU_MCP_TRANSPORT=stdio` switches back to the local behaviour.
 
 ## Tools
 
