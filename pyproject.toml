@@ -1,6 +1,6 @@
 [project]
 name = "asu-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "Unofficial MCP server for Arizona State University's public data - live class search"
 readme = "README.md"
 requires-python = ">=3.12"
