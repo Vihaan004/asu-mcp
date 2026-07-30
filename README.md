@@ -50,6 +50,17 @@ claude mcp add asu -- uvx --from https://github.com/Vihaan004/asu-mcp/archive/re
 Restart the client afterwards; the server is a long-lived process started when
 the app launches.
 
+### Getting updates
+
+Restarting the client re-runs `uvx`, which revalidates the archive against
+GitHub — so a restart is normally all a user needs. **But bump `version` in
+`pyproject.toml` for every change you want to ship.** uv keys its build cache
+on package name and version, so a new commit that reuses the same version
+number can be served from an existing cached build and never reach anyone.
+
+`asu` reports its own version in the MCP handshake, so you can always ask a
+client what it is actually running.
+
 **Working on it?** Point the client at your checkout instead, so edits take
 effect on the next restart with no fetch at all:
 
