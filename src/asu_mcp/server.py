@@ -13,6 +13,8 @@ Transports:
 from __future__ import annotations
 
 import os
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _installed_version
 
 from mcp.server.fastmcp import FastMCP
 from starlette.requests import Request
@@ -57,6 +59,12 @@ endorsed by Arizona State University.
 """
 
 
+try:
+    __version__ = _installed_version("asu-mcp")
+except PackageNotFoundError:  # running straight from a source tree
+    __version__ = "0+source"
+
+
 def _transport() -> str:
     transport = os.environ.get("ASU_MCP_TRANSPORT", "stdio").strip()
     if transport not in {"stdio", "sse", "streamable-http"}:
@@ -78,6 +86,12 @@ def build_server(transport: str = "stdio") -> FastMCP:
         host="0.0.0.0",
         port=int(os.environ.get("PORT", "8000")),
     )
+
+    # FastMCP takes no version argument, so serverInfo reports the MCP SDK's
+    # version rather than this server's. Installs can sit on a cached build for
+    # a long time without anyone noticing, which makes "what am I actually
+    # running" worth being able to answer from the client.
+    mcp._mcp_server.version = __version__
 
     register_topic(mcp)
     register_classes(mcp)
