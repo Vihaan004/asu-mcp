@@ -19,10 +19,15 @@ or endorsed by Arizona State University.
 
 ### Claude Desktop or Claude Code
 
+You need [uv](https://docs.astral.sh/uv/getting-started/installation/). You do
+**not** need git — the install below fetches a source archive over plain HTTPS,
+because most students do not have git installed and a `git+` URL fails with a
+message that does not mention it.
+
 **Claude Code**
 
 ```bash
-claude mcp add asu -- uvx --from git+https://github.com/Vihaan004/asu-mcp asu-mcp
+claude mcp add asu -- uvx --from https://github.com/Vihaan004/asu-mcp/archive/refs/heads/main.tar.gz asu-mcp
 ```
 
 **Claude Desktop** — add to `claude_desktop_config.json`:
@@ -32,7 +37,28 @@ claude mcp add asu -- uvx --from git+https://github.com/Vihaan004/asu-mcp asu-mc
   "mcpServers": {
     "asu": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/Vihaan004/asu-mcp", "asu-mcp"]
+      "args": [
+        "--from",
+        "https://github.com/Vihaan004/asu-mcp/archive/refs/heads/main.tar.gz",
+        "asu-mcp"
+      ]
+    }
+  }
+}
+```
+
+Restart the client afterwards; the server is a long-lived process started when
+the app launches.
+
+**Working on it?** Point the client at your checkout instead, so edits take
+effect on the next restart with no fetch at all:
+
+```json
+{
+  "mcpServers": {
+    "asu": {
+      "command": "uv",
+      "args": ["run", "--directory", "/path/to/asu-mcp", "asu-mcp"]
     }
   }
 }
@@ -182,6 +208,13 @@ Two things this deliberately does **not** do:
   Relaxing to `computing` produces a plausible, confidently wrong answer — a
   security architecture director — so it stops and says the directory has
   nobody indexed under those words.
+
+**Dependencies are pinned below `mcp` 2.0.** 2.0 removed
+`mcp.server.fastmcp` — FastMCP is now `mcp.server.mcpserver` — so an unpinned
+install resolves to 2.x and the server raises `ModuleNotFoundError` on import
+before it can serve anything. A lockfile hides this from anyone developing on
+it: the first person to feel it is a new user installing fresh, which is the
+worst possible place to find out. Lift the pin with a real 2.x migration.
 
 Responses are cached in memory — term and subject lists for six hours, searches
 for ten to thirty minutes. Long enough to be a good neighbour to ASU's servers,
