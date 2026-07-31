@@ -1,7 +1,7 @@
 # ASU MCP
 
-Ask Claude about ASU in plain language — classes, people, events and news — and
-get answers from live university data instead of a search engine's guess.
+Ask Claude about ASU in plain language and get answers from live university
+data instead of a search engine's guess.
 
 > "Which machine learning classes still have seats and don't meet before 10am?"
 > "Who at ASU works on robotics, and how do I reach them?"
@@ -9,28 +9,22 @@ get answers from live university data instead of a search engine's guess.
 > "What has ASU published about semiconductors lately?"
 > "What does ASU actually do in sustainability?"
 
-No ASURITE, no login, nothing behind a wall — only data ASU already publishes
+No ASURITE, no login, nothing behind a wall. Only data ASU already publishes
 openly.
 
-**Unofficial.** Built by a former ASU student. Not operated by, affiliated with,
-or endorsed by Arizona State University.
+**Unofficial.** Built by a former ASU student, not affiliated with or endorsed
+by Arizona State University. Please read the [disclaimer](#disclaimer) before
+relying on anything it tells you.
 
-## Use it
+## Setup
 
-### Claude Desktop or Claude Code
+You need [uv](https://docs.astral.sh/uv/getting-started/installation/), a small
+tool that runs the connector for you. That is the only thing to install.
 
-You need [uv](https://docs.astral.sh/uv/getting-started/installation/). You do
-**not** need git — the install below fetches a source archive over plain HTTPS,
-because most students do not have git installed and a `git+` URL fails with a
-message that does not mention it.
+### Claude Desktop
 
-**Claude Code**
-
-```bash
-claude mcp add asu -- uvx --from https://github.com/Vihaan004/asu-mcp/archive/refs/heads/main.tar.gz asu-mcp
-```
-
-**Claude Desktop** — add to `claude_desktop_config.json`:
+Open **Settings → Developer → Edit Config**, then add the `asu` block to
+`claude_desktop_config.json`:
 
 ```json
 {
@@ -47,87 +41,62 @@ claude mcp add asu -- uvx --from https://github.com/Vihaan004/asu-mcp/archive/re
 }
 ```
 
-Restart the client afterwards; the server is a long-lived process started when
-the app launches.
+Save the file, then fully quit Claude Desktop and open it again. Closing the
+window is not enough on Windows, since the app keeps running in the system
+tray. Quit it from the tray icon.
 
-### Getting updates
-
-Restarting the client re-runs `uvx`, which revalidates the archive against
-GitHub — so a restart is normally all a user needs. **But bump `version` in
-`pyproject.toml` for every change you want to ship.** uv keys its build cache
-on package name and version, so a new commit that reuses the same version
-number can be served from an existing cached build and never reach anyone.
-
-`asu` reports its own version in the MCP handshake, so you can always ask a
-client what it is actually running.
-
-**Working on it?** Point the client at your checkout instead, so edits take
-effect on the next restart with no fetch at all:
-
-```json
-{
-  "mcpServers": {
-    "asu": {
-      "command": "uv",
-      "args": ["run", "--directory", "/path/to/asu-mcp", "asu-mcp"]
-    }
-  }
-}
-```
-
-### claude.ai as a custom connector
-
-claude.ai talks to remote MCP servers over HTTP, so this has to be running
-somewhere reachable first. There is **no public hosted instance yet** — host it
-yourself and it works today:
+### Claude Code
 
 ```bash
-docker build -t asu-mcp . && docker run -p 8000:8000 asu-mcp
+claude mcp add asu -- uvx --from https://github.com/Vihaan004/asu-mcp/archive/refs/heads/main.tar.gz asu-mcp
 ```
 
-Then point Settings → Connectors → **Add custom connector** at
-`https://your-host/mcp`. Custom connectors are available on Free, Pro, Max,
-Team and Enterprise plans (Free is limited to one).
+### claude.ai in the browser
 
-Plain Docker on purpose: the same image runs on Railway, Render, Fly, Koyeb or
-your own box. `GET /health` is there for platform health checks, and
-`ASU_MCP_TRANSPORT=stdio` switches back to the local behaviour.
+Not available yet. The web app can only talk to a connector that is hosted
+online, and there is no public instance running. You can host your own, see
+[DEV.md](DEV.md).
 
-## Tools
+## Updating
 
-Nine tools on one connector. Four areas, deliberately not four connectors —
-making students install one thing per campus system would recreate the
-fragmentation this exists to remove.
+Quit Claude Desktop and open it again. It picks up the newest version on its
+own, so there is nothing to reinstall. To check which version is running, just
+ask Claude what version of the ASU connector it is connected to.
+
+## Features
+
+Nine tools on one connector, covering four parts of ASU. When a search comes
+back empty, it says so instead of guessing.
 
 **Everything at once**
 
 | Tool | |
 |---|---|
-| `search_asu` | One topic across all four sources in parallel: courses, researchers, upcoming events and news. For "what does ASU do in robotics" — one call instead of four. |
+| `search_asu` | One topic across all four sources at once: courses, researchers, upcoming events and news. Good for "what does ASU do in robotics". |
 
-**Classes** — ASU's live class schedule
-
-| Tool | |
-|---|---|
-| `search_classes` | Search by subject, course number, free-text query, instructor, campus, days, times, level, units, honors. Optionally only sections with open seats. |
-| `get_class` | One section in full: seats, room with campus map link, enrollment and drop/withdraw deadlines, consent and reserved-seat restrictions. |
-| `list_terms` | The current term and a few either side; `include_all` for all 71. |
-| `list_subjects` | The 343 subject codes for a term, so "computer science" resolves to `CSE`. |
-
-**People** — the public faculty and staff directory
+**Classes**, from ASU's live class schedule
 
 | Tool | |
 |---|---|
-| `search_people` | Find who works on a topic, or look up one person. Returns titles, departments, published contact details, expertise and research interests. |
+| `search_classes` | Search by subject, course number, topic, instructor, campus, days, times, level, units or honors. Can show only sections with open seats. |
+| `get_class` | One section in full: seats, room with a campus map link, enrollment and drop deadlines, and any restrictions. |
+| `list_terms` | The current term and a few either side. |
+| `list_subjects` | Every subject code for a term, so "computer science" turns into `CSE`. |
 
-**Events** — the university-wide calendar
+**People**, from the public faculty and staff directory
+
+| Tool | |
+|---|---|
+| `search_people` | Find who works on a topic, or look up one person. Returns titles, departments, published contact details and research interests. |
+
+**Events**, from the university calendar
 
 | Tool | |
 |---|---|
 | `search_events` | Upcoming talks, workshops, info sessions and exhibitions, filtered by keyword, campus or date. |
 | `get_event` | Full description and registration link for one event. |
 
-**News** — ASU's own newsroom
+**News**, from ASU's newsroom
 
 | Tool | |
 |---|---|
@@ -150,110 +119,35 @@ CSE 310 — Data Structures and Algorithms (3 credits)
 
 Also `terms`, `subjects`, `class 66445`.
 
-## How it works, and how it breaks
+## Disclaimer
 
-ASU's public class search is a React SPA over an undocumented JSON API at
-`eadvs-cscc-catalog-api.apps.asu.edu`. This calls that API directly.
+Provided as is, which is lawyer for "works on my machine." No warranty:
+express, implied, or vibed. This tool is not responsible for enrollment chaos. 
+Use at your own risk, but do have fun :)
 
-**Authentication is a frontend accident.** The SPA builds its header as
-`"Bearer " + sessionStorage.getItem("catalog.jwt.token")`. For a visitor who is
-not signed in, that returns JavaScript `null`, so the literal string
-`Bearer null` goes over the wire — and the backend accepts it as the anonymous
-principal. We send the same. Only that exact string works; `Bearer x` gets a
-401.
+This is an independent, unofficial project. It is not operated by, affiliated
+with, endorsed by, or approved by Arizona State University. ASU's name and
+marks belong to ASU. Nothing here speaks for the university.
 
-That is the likeliest way this breaks. When it does, the server raises
-`AnonymousAuthRejected` saying so, rather than quietly returning nothing.
+**Treat everything it returns as a starting point, not a source of truth.** It
+reads ASU's public pages and passes on what it finds, so anything that is
+missing, stale or wrong at the source will be missing, stale or wrong here too.
+It can also break without warning if ASU changes how those pages work.
 
-**The other three sources.** People come from the iSearch directory API
-(`search.asu.edu/api/v1/webdir-profiles/faculty-staff`), a de facto public JSON
-API. Events are parsed from the rendered calendar listing — the site does expose
-Drupal JSON:API, but its event index only holds 2021–2023 content and its date
-filtering is broken (a `> 2099` filter still returns rows), so it is an archive,
-not the calendar. News reads `news.asu.edu`'s own search rather than a paid
-web-search API, so there is no API key to supply and no per-user cost.
+Seat counts deserve their own warning. They are live at the moment of the
+search, but they are not reservations and they change constantly. A class shown
+as open can be full seconds later. Enrollment happens in My ASU, and that is
+the only place a seat becomes real.
 
-Two other things worth knowing if you build on this:
+Before you act on anything from this connector, whether that is registering,
+counting on a deadline, showing up to an event or emailing someone, confirm it
+against the official source: My ASU, ASU's class search, the department, or the
+event page itself.
 
-- **`searchType=open` is a no-op.** The API accepts it and returns full sections
-  anyway. `open_only` filters client-side on the registrar's `ENRLSTAT` flag.
-  Anything that trusts the API parameter will report full classes as open.
-- **Term codes are opaque.** Fall 2026 is `2267`. Every tool accepts
-  `"Fall 2026"` and defaults to the current term. Nothing should hardcode one.
+## DIY
 
-- **The sources disagree about abbreviations, in opposite directions.** The
-  catalog indexes official course titles, which are spelled out: in Fall 2026
-  `artificial intelligence` matches 30 sections and `AI` matches none. The
-  events calendar indexes what an organiser typed, which is where the
-  abbreviation lives: `AI` matches nine events and `artificial intelligence`
-  matches zero. Whichever form a student thinks in, one of the two would return
-  nothing. Every search now tries both and says which one matched.
-- **The directory fuzzy-matches surnames.** Searching `robotics` returns people
-  named Root, Rootes and Root before anyone who does robotics. Results are
-  over-fetched, re-ranked, and — new — dropped entirely when no query word
-  appears anywhere in the row, because sorting cannot fix a result set that is
-  all noise. A direct name lookup still wins outright.
-- **Conversational phrasing is stripped, not rejected.** The directory
-  AND-matches every token, so "someone who works on quantum computing at ASU"
-  used to relax to the literal words `works on` and return people surnamed
-  Works. Filler is removed server-side; a tool description asking the caller to
-  phrase queries carefully does not survive contact with a real student.
-- **Event keyword search is client-side, over titles only.** The calendar
-  listing ignores a `search` parameter — it returns the same 24 cards whatever
-  you pass — so filtering happens locally across roughly the next two months.
-  Results say how many events were scanned and over what dates: "no engineering
-  events in the next 141" is a real answer, and a model needs to be able to
-  tell it apart from a failure.
-
-Two things this deliberately does **not** do:
-
-- **Search event descriptions.** It looks like the obvious fix for titles-only
-  matching, and the numbers say otherwise: only 40 of 141 upcoming events carry
-  a description at all, crawling every detail page costs ~30s, and for the
-  query that motivated it — `artificial intelligence` — it surfaced zero extra
-  events. Matching on body text also matched `ai` inside *available* and
-  *training*, returning all 141. Expanding abbreviations fixed the real case
-  for one extra request.
-- **Answer topic questions the directory cannot.** `quantum computing` returns
-  nobody, and the four rows `quantum` returns are all fuzzy surname matches.
-  Relaxing to `computing` produces a plausible, confidently wrong answer — a
-  security architecture director — so it stops and says the directory has
-  nobody indexed under those words.
-
-**Dependencies are pinned below `mcp` 2.0.** 2.0 removed
-`mcp.server.fastmcp` — FastMCP is now `mcp.server.mcpserver` — so an unpinned
-install resolves to 2.x and the server raises `ModuleNotFoundError` on import
-before it can serve anything. A lockfile hides this from anyone developing on
-it: the first person to feel it is a new user installing fresh, which is the
-worst possible place to find out. Lift the pin with a real 2.x migration.
-
-Responses are cached in memory — term and subject lists for six hours, searches
-for ten to thirty minutes. Long enough to be a good neighbour to ASU's servers,
-short enough that seat counts stay honest.
-
-Seat counts are live but are not reservations; a class can fill between the
-search and enrolling. Enrolling still happens in My ASU.
-
-## Development
-
-```bash
-uv sync
-uv run pytest
-```
-
-Tests are fixture-based and never touch the network — a captured class-search
-response for CSE 310, Fall 2026 (11 sections mixing full and open, in-person and
-online, some with no scheduled meeting time) plus trimmed real markup for the
-events and news parsers. Several pin behaviour that only showed up when a model
-drove the connector as a real client: the surname-fuzz filter, the query
-relaxation that must not reach `works on`, and the abbreviation expansion.
-
-To see what a model actually receives, and to catch a source that has changed
-shape, run every tool against live ASU data:
-
-```bash
-uv run python samples.py
-```
+[DEV.md](DEV.md) covers how it works, where the data comes from, the known
+rough edges, running the tests and hosting your own copy.
 
 ## License
 
