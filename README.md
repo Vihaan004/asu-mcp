@@ -9,6 +9,10 @@ data instead of a search engine's guess.
 > "What has ASU published about semiconductors lately?"
 > "What does ASU actually do in sustainability?"
 
+<p align="center">
+  <img width="600" height="690" alt="image" src="https://github.com/user-attachments/assets/1d98c933-3bb6-4d47-9eae-89962eae11e9" />
+</p>
+
 No ASURITE, no login, nothing behind a wall. Only data ASU already publishes
 openly.
 
